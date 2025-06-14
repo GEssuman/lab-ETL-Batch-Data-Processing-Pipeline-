@@ -23,6 +23,9 @@ The pipeline processes data in batches, ensuring accuracy, traceability, and sca
 
 ## Deployment Options
 
+
+*NB: The Aws script to be uplload are int aws directory*
+
 ### Cloud Deployment (AWS)
 In a full cloud setup:
 - **Data Source:** AWS Aurora MySQL  

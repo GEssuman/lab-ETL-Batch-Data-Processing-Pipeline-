@@ -135,5 +135,5 @@ total_bookings_per_user.show()
 
 
 
-apartments_with_usd.createOrReplaceTempView("apartment_list_tb")
+
 
