@@ -1,0 +1,51 @@
+services:
+  rental_postgres:
+    image: postgres:14
+    container_name: "rental_postgres"
+    restart: always
+    healthcheck:
+      test: [ "CMD", "sh", "-c", "pg_isready -d ${POSTGRES_DB} -U ${POSTGRES_USER}" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - rental_postgres_data:/var/lib/postgresql/data
+      - ./data:/opt/sql-data
+      - ./scripts/sql:/docker-entrypoint-initdb.d
+    ports:
+    - 5438:5432
+    networks:
+      - step-network
+
+    
+  spark-master:
+    image: bitnami/spark:latest
+    container_name: step-spark-job
+    user: root
+    ports:
+      - "7077:7077"
+      - "8087:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./spark-job/apps:/opt/spark/apps
+      - ./spark-job/resources:/opt/spark/resources 
+
+    environment:
+      - SPARK_MODE=master
+      - SPARK_LOCAL_IP=spark-master
+    networks:
+      - step-network
+
+
+
+volumes:
+  rental_postgres_data:
+
+networks:
+  step-network:
+    
