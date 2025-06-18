@@ -1,9 +1,9 @@
 -- Active: 1749886027822@@127.0.0.1@5438@apartment_rental_db
--- CREATE DATABASE music_stream_db;
+
 
 CREATE SCHEMA IF NOT EXISTS raw;
 
-CREATE SCHEMA IF NOT EXISTS curated;
+
 
 CREATE SCHEMA IF NOT EXISTS presentation;
 
@@ -30,6 +30,7 @@ CREATE TABLE raw.apartment_attributes (
 
 
 COPY raw.apartment_attributes FROM '/opt/sql-data/apartment_attributes.csv' WITH DELIMITER ',' CSV HEADER;
+-- COPY raw.apartment_attributes FROM 'D:\My Documents\Amalitech\Phase2\Lab1\2--Batch ETL with Glue, Step Function\2--Batch ETL with Glue, Step Function\data\apartment_attributes.csv' WITH DELIMITER ',' CSV HEADER;
 
 
 DROP TABLE  IF EXISTS  raw.user_viewing;

@@ -1,4 +1,7 @@
--- Active: 1749886027822@@127.0.0.1@5438@apartment_rental_db
+CREATE DATABASE apartment_rental_db;
+
+
+
 CREATE SCHEMA IF NOT EXISTS curated;
 
 
@@ -23,47 +26,50 @@ CREATE TABLE IF NOT EXISTS curated.apartment_bookings (
 
 );
 
-
-
+CREATE SCHEMA IF NOT EXISTS presentation;
+CREATE TABLE presentation.average_listing_price (
+    week_start DATE NOT NULL,                    
+    average_price DOUBLE PRECISION NOT NULL,            
+    PRIMARY KEY (week_start)
+);
 
 CREATE TABLE IF NOT EXISTS presentation.occupancy_rate_per_month(
     month DATE PRIMARY KEY,
     total_bookings INT NOT NULL,
     total_booked_nights INT NOT NULL,
     occupancy_rate_percent DOUBLE PRECISION NOT NULL
-)
+);
 
 
 CREATE TABLE IF NOT EXISTS presentation.top_listings_weekly_revenue(
-    week DATE PRIMARY KEY,
+    week DATE NOT NULL,
     apartment_id INT NOT NULL,
-    weekly_revenue DOUBLE PRECISION NOT NULL
-)
+    weekly_revenue DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (week, apartment_id)
+);
 
 CREATE TABLE IF NOT EXISTS presentation.popular_cities_per_week(
     week DATE,
     cityname VARCHAR(100),
-    total_bookings INT NOT NULL
-)
+    total_bookings INT NOT NULL,
+    PRIMARY KEY (week, cityname)
+);
 
 
 CREATE TABLE IF NOT EXISTS presentation.avg_booking_duration_per_month(
     month DATE PRIMARY KEY,
     avg_booking_duration_days  DOUBLE PRECISION NOT NULL
 
-)
+);
 
 CREATE TABLE IF NOT EXISTS presentation.total_bookings_per_user(
     user_id INTEGER PRIMARY KEY,
     total_bookings INTEGER NOT NULL
-)
+);
 
 CREATE TABLE IF NOT EXISTS presentation.repeat_customer_rate_per_month(
     month DATE PRIMARY KEY,
     num_repeated_customers INT NOT NULL,
     total_customers INT NOT NULL,
     repeat_customer_rate_percent DOUBLE PRECISION NOT NULL
-)
-
-
-
+);

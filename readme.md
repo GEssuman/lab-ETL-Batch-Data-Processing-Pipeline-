@@ -11,13 +11,16 @@ This project implements a scalable **batch data processing pipeline** designed t
 
 ## Architecture
 
-This solution follows the **Medallion Architecture (Bronze → Silver → Gold)** pattern using **Amazon S3** as the storage layer:
+This solution follows the **Medallion Architecture (Bronze → Silver → Gold)** pattern using **Amazon S3 and Redshift** as the storage layer:
 
 - `raw_data/` → Bronze: Raw ingested data  
-- `curated/` → Silver: Cleaned and transformed data  
-- `presentation/` → Gold: Aggregated insights ready for analytics  
+- `curated layer in the Redshift` → Silver: Cleaned and transformed data  
+- `presentation layer in the Redshift ` → Gold: Aggregated insights ready for analytics  
 
-The pipeline processes data in batches, ensuring accuracy, traceability, and scalability for large datasets.
+The pipeline processes data in batches, ensuring accuracy, traceability, and scalability for large datasets which is orchestrated using AWS Step Functions.
+
+
+![System Architecture](./docs/Batch%20Step%20Function.drawio.png)
 
 ---
 
@@ -32,9 +35,8 @@ In a full cloud setup:
 - **Processing:** AWS Glue & PySpark  
 - **Storage:** Amazon S3 (Medallion zones)  
 - **Data Warehouse:** Amazon Redshift  
-- **Orchestration:** AWS Step Functions (planned)  
+- **Orchestration:** AWS Step Functions 
 
-> Orchestration using AWS Step Functions is **planned** for production-grade pipeline scheduling and monitoring.
 
 ---
 
@@ -55,17 +57,68 @@ This setup provides fast iteration and validation before deploying to the cloud.
 | Storage        | Amazon S3         |
 | Transformation | PySpark           |
 | Warehouse      | Amazon Redshift / PostgreSQL |
-| Orchestration  | AWS Step Functions (planned) |
+| Orchestration  | AWS Step Functions |
 
 ---
 
-##  TODO
-
-- [ ] Integrate AWS Step Functions for orchestration  
-- [ ] Implement Redshift table schema creation via Glue  
+##  TODO 
 - [ ] Add data validation and quality checks  
-- [ ] Add System Architectur Design  
 
 ---
+
+## 
+# Setting on AWS 
+
+
+## AWS Setup Instructions
+
+### 1. S3 Bucket Structure
+Create an S3 bucket for storing your data. Within this bucket:
+
+### 2. Glue Catalog and Crawlers
+- Create an **AWS Glue Crawler** to crawl the raw data folders.
+- Choose **"Create a new database"** or use an existing one.
+- Use an IAM role with `AmazonS3ReadOnlyAccess`, `AWSGlueServiceRole`, and other necessary permissions.
+- Run the crawler to populate the Glue Data Catalog.
+
+---
+
+### 3. Glue Scripts
+- Upload all your transformation scripts (from `aws/` folder) into AWS Glue Studio or directly as Glue Jobs.
+- Assign the same IAM role used in the crawler.
+- Set up job parameters (e.g., `--JOB_NAME`) and ensure S3 temp directories are defined for Redshift writes.
+- Use **Glue DynamicFrame to JDBC** to push data into Redshift (via `write_dynamic_frame.from_jdbc_conf()`).
+
+---
+
+## Redshift Setup Instructions
+
+### 1. Redshift Serverless (Recommended)
+- Go to Amazon Redshift > **Serverless** and create a workgroup and namespace.
+- Ensure it is in the same **VPC and subnet** as your Glue Jobs.
+
+### 2. Redshift Connection in Glue
+- Go to AWS Glue > **Connections**
+- Create a new **JDBC Connection**
+  - Type: Redshift
+  - JDBC URL: from your Redshift cluster
+  - Set credentials and test connection
+- Attach this connection to your Glue job via `catalog_connection`
+- Create vpc endpoints for the glue to access other services outside its network
+
+### 3. Initialize Redshift Tables
+- Run provided SQL scripts (in `sql/init_db.sql`) to initialize the schemas:
+NB : with this architecture, the raw date in the s3 bucket, the curate and presentation schema table are in the redshift.
+
+
+### 3. Creating Stae Machine (Step Function)
+-Using Visual Assistance, drag and drop the glue job components and provide the neccessary parameter for the each state(ie the job name)
+- Attache IAM role to the state machine to be able to access glue
+---
+## Ouput of the Pipeline After Executing the Step Functions
+![Step Function Graph](./docs/stepfunctions_graph.png)
+
+
+
 
 

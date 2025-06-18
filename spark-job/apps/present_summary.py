@@ -68,7 +68,7 @@ curated_booked_listings_df = curated_booked_listings_df.select(
     F.col("title").cast("string"),
     F.col("source").cast("string"),
     F.col("listing_created_on").cast(DateType()),
-    F.col("is_active").cast("string"),
+    F.col("is_active").cast("boolean"),
     F.col("booking_date").cast(DateType()),
     F.col("checkin_date").cast(DateType()),
     F.col("checkout_date").cast(DateType()),
@@ -223,11 +223,11 @@ repeat_customer_rate_properties = {
         "table":"presentation.repeat_customer_rate_per_month"
     }
 
-load_data_to_db(occupancy_rate_summary, occupancy_rate_summary_properties)
-load_data_to_db(most_popular_location, most_popular_location_properties)
-load_data_to_db(top_performing_listing, top_performing_listing_properties)
-load_data_to_db(total_bookings_per_user, total_bookings_per_user_properties)
-load_data_to_db(average_booking_duration, apartment_attributes_properties)
+# load_data_to_db(occupancy_rate_summary, occupancy_rate_summary_properties)
+# load_data_to_db(most_popular_location, most_popular_location_properties)
+# load_data_to_db(top_performing_listing, top_performing_listing_properties)
+# load_data_to_db(total_bookings_per_user, total_bookings_per_user_properties)
+load_data_to_db(average_booking_duration, average_booking_duration_properties)
 load_data_to_db(repeat_customer_rate,repeat_customer_rate_properties)
 # occupancy_rate_summary.show()
 # most_popular_location.show()

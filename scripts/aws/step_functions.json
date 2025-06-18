@@ -1,0 +1,23 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "CurateDataJob",
+  "States": {
+    "CurateDataJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Arguments": {
+        "JobName": "curate_data_etl_job"
+      },
+      "Next": "PresenationSummaryJob"
+    },
+    "PresenationSummaryJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Arguments": {
+        "JobName": "presentation_summary_etl_job"
+      },
+      "End": true
+    }
+  },
+  "QueryLanguage": "JSONata"
+}
