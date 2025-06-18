@@ -70,43 +70,39 @@ bookings_schema = StructType([
     StructField("booking_status", StringType(), True)
 ])
 
-
-
-apartment_attributes_dyf = glueContext.create_dynamic_frame.from_options(
+def get_data_from_s3(glue_context, s3_bucket, schema, format="csv", header=True, ctx_name=""):
+    return glue_context.create_dynamic_frame.from_options(
     connection_type="s3",
-    format="csv",
-    connection_options={"paths": ["s3://apartment-rental-db-gke.amalitech/raw_data/apartment_attributes/"], "recurse": True},
-    format_options={"withHeader": True},
-    transformation_ctx="apartment_attributes_dyf"
-)
-apartment_attributes_df = apartment_attributes_dyf.toDF().dropDuplicates()
+    format=format,
+    connection_options={"paths": [s3_bucket], "recurse": True},
+    format_options={"withHeader": header},
+    transformation_ctx=ctx_name
+    ).toDF(schema=schema).dropDuplicates()
 
-user_viewing_dyf = glueContext.create_dynamic_frame.from_options(
-    connection_type="s3",
-    format="csv",
-    connection_options={"paths": ["s3://apartment-rental-db-gke.amalitech/raw_data/user_viewing/"]},
-    format_options={"withHeader": True},
-    transformation_ctx="user_viewing_dyf"
-)
-user_viewing_df = user_viewing_dyf.toDF().dropDuplicates()
 
-apartments_dyf = glueContext.create_dynamic_frame.from_options(
-    connection_type="s3",
-    format="csv",
-    connection_options={"paths": ["s3://apartment-rental-db-gke.amalitech/raw_data/apartments/"]},
-    format_options={"withHeader": True},
-    transformation_ctx="apartments_dyf"
-)
-apartments_df = apartments_dyf.toDF().dropDuplicates()
+apartment_attributes_df = get_data_from_s3(
+    glueContext,
+    "s3://apartment-rental-db-gke.amalitech/raw_data/apartment_attributes/",
+    apartment_attributes_schema
+    )
 
-bookings_dyf = glueContext.create_dynamic_frame.from_options(
-    connection_type="s3",
-    format="csv",
-    connection_options={"paths": ["s3://apartment-rental-db-gke.amalitech/raw_data/bookings/"]},
-    format_options={"withHeader": True},
-    transformation_ctx="bookings_dyf"
-)
-bookings_df = bookings_dyf.toDF().dropDuplicates()
+user_viewing_df = get_data_from_s3(
+    glueContext,
+    "s3://apartment-rental-db-gke.amalitech/raw_data/user_viewing/",
+    user_viewing_schema
+    )
+
+apartments_df = get_data_from_s3(
+    glueContext, 
+    "s3://apartment-rental-db-gke.amalitech/raw_data/apartments/",
+    apartments_schema
+    )
+bookings_df = get_data_from_s3(
+    glueContext, 
+    "s3://apartment-rental-db-gke.amalitech/raw_data/bookings/",
+    bookings_schema
+    )
+
 
 # Clean and format date fields
 user_viewing_df = user_viewing_df.withColumn("viewed_at", F.date_format(F.to_date("viewed_at", "dd/MM/yyyy"), "yyyy-MM-dd"))
@@ -116,6 +112,10 @@ bookings_df = bookings_df.withColumn("booking_date", F.date_format(F.to_date("bo
                          .withColumn("checkin_date", F.date_format(F.to_date("checkin_date", "dd/MM/yyyy"), "yyyy-MM-dd")) \
                          .withColumn("checkout_date", F.date_format(F.to_date("checkout_date", "dd/MM/yyyy"), "yyyy-MM-dd"))
 
+
+
+
+
 # Add exchange rates
 exchange_rates_df = spark.createDataFrame([
     ("USD", 1.0),
@@ -123,21 +123,58 @@ exchange_rates_df = spark.createDataFrame([
     ("INR", 0.012),
 ], ["currency", "usd_rate"])
 
-# Join with currency rates
+apartment_attributes_df = apartment_attributes_df.select(
+    F.col("id").cast("int"),
+    F.col("category").cast("string"),
+    F.col("body").cast("string"),
+    F.col("cityname").cast("string"),
+    F.col("state").cast("string")
+)
+
+
 apartments_df = apartments_df.join(exchange_rates_df, on="currency", how="left")
-bookings_df = bookings_df.join(exchange_rates_df, on="currency", how="left")
-
 apartments_df = apartments_df.withColumn("price_usd", F.col("price") * F.col("usd_rate"))
-bookings_df = bookings_df.withColumn("total_price_usd", F.col("total_price") * F.col("usd_rate"))
 
-# Drop unnecessary fields
-user_viewing_df = user_viewing_df.drop("viewed_at", "is_wishlisted")
-apartments_cur_df = apartments_df.drop("last_modified_timestamp", "currency", "price") \
-                                 .select("id", "title", "source", "is_active", "listing_created_on", "price_usd")
-bookings_df = bookings_df.drop("booking_status", "currency", "total_price")
 
-apartment_attributes_df = apartment_attributes_df.drop("category", "body", "fee", "pets_allowed", "state",
-                                                       "square_feet", "has_photo", "address", "latitude", "longitude")
+apartments_df  = apartments_df.select(
+    F.col("id").cast("int"),
+    F.col("title").cast("string"),
+    F.col("listing_created_on"),
+    F.col("is_active").cast("bool"),
+    F.col("price_usd").cast("double")
+)
+
+bookings_df = bookings_df.select(
+    F.col("booking_id").cast("int"),
+    F.col("apartment_id").cast("int"),
+    F.col("user_id").cast("string"),
+    F.col("booking_date"),
+    F.col("checkin_date"),
+    F.col("checkout_date"),
+    F.col("total_price").cast("double"),
+    F.col("currency").cast("string"),
+    F.col("booking_status").cast("string")
+)
+
+
+listings_df = (
+    bookings_df.alias("b")
+    .join(apartments_df.alias("a"), F.col("b.apartment_id") == F.col("a.id"), "left")
+    .join(apartment_attributes_df.alias("attr"), F.col("a.id") == F.col("attr.id"), "left")
+)
+
+
+
+listings_df = listings_df.join(exchange_rates_df, on="currency", how="left")
+listings_df = listings_df.withColumn("total_price_usd", F.col("total_price") * F.col("usd_rate"))
+
+listings_df = listings_df.drop("a.id","a.price_usd", "usd_rate", "total_price", "usd_rate")
+
+
+
+
+
+
 
 # SQL for presentation metrics
 apartments_df.createOrReplaceTempView("apartment_list_tb")
@@ -149,12 +186,14 @@ avg_listing_price = spark.sql("""
     GROUP BY week_start
 """)
 
-# Join to build curated listings
-listings_info = bookings_df.join(apartments_cur_df, bookings_df["apartment_id"] == apartments_cur_df["id"], "left") \
-                           .join(apartment_attributes_df, apartments_cur_df["id"] == apartment_attributes_df["id"], "left").drop("id")
+
+
+
+
+
 
 # Convert back to DynamicFrame
-listings_dyf = DynamicFrame.fromDF(listings_info, glueContext, "listings_dyf")
+listings_dyf = DynamicFrame.fromDF(listings_df, glueContext, "listings_dyf")
 avg_price_dyf = DynamicFrame.fromDF(avg_listing_price, glueContext, "avg_price_dyf")
 
 # Write to S3 (Curated and Presentation)

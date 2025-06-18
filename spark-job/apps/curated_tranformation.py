@@ -8,11 +8,11 @@ from pyspark.sql.types import StructType, StructField, IntegerType, StringType, 
 from helper_func import read_from_db
 
 
-# ##Load env vairables
-# POSTGRES_DB = os.getenv("POSTGRES_DB")
-# POSTGRES_USER = os.getenv("POSTGRES_USER")
-# POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-# AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET")
+##Load env vairables
+POSTGRES_DB = os.getenv("POSTGRES_DB")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET")
 
 apartment_attributes_schema = StructType([
     StructField("id", IntegerType(), False),
@@ -145,59 +145,97 @@ bookings_df = bookings_df.withColumn("booking_date", F.date_format(F.to_date("bo
                          .withColumn("checkin_date", F.date_format(F.to_date("checkin_date", "dd/MM/yyyy"),"yyyy-MM-dd")) \
                          .withColumn("checkout_date", F.date_format(F.to_date("checkout_date", "dd/MM/yyyy"), "yyyy-MM-dd"))
 
+apartment_attributes_df = apartment_attributes_df.select(
+    F.col("id").cast("int"),
+    F.col("category").cast("string"),
+    F.col("body").cast("string"),
+    F.col("cityname").cast("string"),
+    F.col("state").cast("string")
+)
+
+
 apartments_df = apartments_df.join(exchange_rates_df, on="currency", how="left")
-bookings_df = bookings_df.join(exchange_rates_df, on="currency", how="left")
+apartments_df = apartments_df.withColumn("price_usd", F.col("price") * F.col("usd_rate"))
 
 
-apartments_with_usd = apartments_df.withColumn(
-    "price_usd", F.col("price") * F.col("usd_rate")
+apartments_df  = apartments_df.select(
+    F.col("id").cast("int"),
+    F.col("title").cast("string"),
+    F.col("source").cast("string"),
+    F.col("listing_created_on"),
+    F.col("is_active").cast("boolean"),
+    F.col("price_usd").cast("double")
 )
 
-bookings_df_usd= bookings_df.withColumn(
-    "total_price_usd", F.col("total_price") * F.col("usd_rate")
+bookings_df = bookings_df.select(
+    F.col("booking_id").cast("int"),
+    F.col("apartment_id").cast("int"),
+    F.col("user_id").cast("string"),
+    F.col("booking_date"),
+    F.col("checkin_date"),
+    F.col("checkout_date"),
+    F.col("total_price").cast("double"),
+    F.col("currency").cast("string"),
+    F.col("booking_status").cast("string")
 )
 
-# drop unneessary field 
-user_viewing_df = user_viewing_df.drop(*["viewed_at", "is_wishlisted"])
-apartments_with_usd = apartments_with_usd.drop(*["last_modifide_timestamp", "currency", "price"])
-
-apartments_df_cur = apartments_with_usd.select(["id", "title", "source", "is_active", "listing_created_on"])
-bookings_df_usd = bookings_df_usd.drop(*["payment_status", "number_guests", "total_price", "currency"])
-apartment_attributes_df = apartment_attributes_df.drop(*["category", "body", "fee", "pets_allowed", "state", "square_feet", "has_photo", "price_type", "price_display", "address", "latitude", "longitude"])
-# # Join example
-# listings_info = bookings_df_usd.join(apartments_df, "apartment_id", "left") \
-#                            .join(apartment_attributes_df, "id", "left") 
-
-# apartment_attributes_df.show()
-# user_viewing_df.show()
-# apartments_df.show()
-# bookings_df_usd.show()
+# SQL for presentation metrics
+apartments_df.createOrReplaceTempView("apartment_list_tb")
+avg_listing_price = spark.sql("""
+    SELECT
+        DATE_TRUNC('week', listing_created_on) AS week_start,
+        AVG(price_usd) AS avg_price_usd
+    FROM apartment_list_tb
+    GROUP BY week_start
+""")
 
 
-apartments_with_usd.createOrReplaceTempView("apartment_list_tb")
+listings_df = (
+    bookings_df.alias("b")
+    .join(apartments_df.alias("a"), F.col("b.apartment_id") == F.col("a.id"), "left")
+    .join(apartment_attributes_df.alias("attr"), F.col("a.id") == F.col("attr.id"), "left")
+)
 
-listings_info = bookings_df_usd.join(apartments_df_cur, bookings_df_usd["apartment_id"] == apartments_df_cur["id"], "left") \
-                           .join(apartment_attributes_df, apartments_df["id"] == apartment_attributes_df["id"], "left").drop("id")\
-                            
 
-listings_info.write \
+
+listings_df = listings_df.join(exchange_rates_df, on="currency", how="left")
+listings_df = listings_df.withColumn("total_price_usd", F.col("total_price") * F.col("usd_rate"))
+
+listings_df = listings_df.select(
+    F.col("booking_id").cast("int"),
+    F.col("apartment_id").cast("int"),
+    F.col("user_id").cast("int"),
+    F.col("category").cast("string"),
+    F.col("body").cast("string"),
+    F.col("cityname").cast("string"),
+    F.col("state").cast("string"),
+    F.col("title").cast("string"),
+    F.col("source").cast("string"),
+    F.col("listing_created_on").cast("date"),
+    F.col("is_active").cast("boolean"),
+    F.col("booking_date").cast("date"),
+    F.col("checkin_date").cast("date"),
+    F.col("checkout_date").cast("date"),
+    F.col("booking_status").cast("string"),
+    F.col("total_price_usd").cast("double")
+)
+
+
+
+
+listings_df.show()
+
+avg_listing_price.show()
+
+
+
+listings_df.write \
     .format("jdbc") \
     .option("url", f"jdbc:postgresql://rental_postgres:5432/apartment_rental_db") \
-    .option("dbtable", "curated.listing_info") \
+    .option("dbtable", "curated.apartment_bookings") \
     .option("user","dataeng_user") \
     .option("password", "de_us$123") \
     .option("driver", "org.postgresql.Driver") \
-    .mode("overwrite") \
+    .mode("append") \
     .save()
 
-# avg_listing_price = spark.sql("""
-#     SELECT
-#         DATE_TRUNC('week', listing_created_on) AS week_start,
-#         AVG(price_usd) AS avg_price
-#     FROM apartment_list_tb
-#     GROUP BY week_start;
-# """)
-
-
-
-# avg_listing_price.show()
